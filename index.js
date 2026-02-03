@@ -1,7 +1,12 @@
-const { chromium } = require("playwright");
+import { chromium } from "playwright-core";
+
+const BROWSERLESS_WS =
+  `wss://production-sfo.browserless.io/chromium/playwright?token=${process.env.BROWSERLESS_TOKEN}`;
 
 (async () => {
-  const browser = await chromium.launch({ headless: false });
+  // ✅ CONNECT to Browserless (DO NOT launch)
+  const browser = await chromium.connect(BROWSERLESS_WS);
+
   const context = await browser.newContext();
   const page = await context.newPage();
 
@@ -11,7 +16,6 @@ const { chromium } = require("playwright");
     window.__PRICE_RESPONSE__ = null;
 
     window.fetch = async (url, options = {}) => {
-      // Only target price endpoint
       if (
         typeof url === "string" &&
         url.includes("/productDesigner/design/price")
@@ -19,7 +23,6 @@ const { chromium } = require("playwright");
         try {
           let body = JSON.parse(options.body);
 
-          // ✅ FORCE EXACT BODY LIKE REAL SITE
           body.productId = 1481;
           body.qty = 1500;
           body.customField = "";
@@ -40,23 +43,17 @@ const { chromium } = require("playwright");
           };
 
           options.body = JSON.stringify(body);
-
-          console.log("✅ PRICE REQUEST BODY SENT:", body);
-        } catch (e) {
-          console.error("Body parse error", e);
-        }
+        } catch (e) {}
       }
 
       const response = await originalFetch(url, options);
 
-      // Capture JSON response
       if (
         typeof url === "string" &&
         url.includes("/productDesigner/design/price")
       ) {
         try {
           const text = await response.clone().text();
-
           if (!text.startsWith("<")) {
             window.__PRICE_RESPONSE__ = JSON.parse(text);
           }
@@ -67,19 +64,19 @@ const { chromium } = require("playwright");
     };
   });
 
-  console.log("Opening page...");
-  await page.goto("https://www.superdoos.nl/doos-op-maat/vouwdozen-op-maat", {
-    waitUntil: "networkidle",
-  });
+  await page.goto(
+    "https://www.superdoos.nl/doos-op-maat/vouwdozen-op-maat",
+    { waitUntil: "networkidle" }
+  );
 
-  console.log("Waiting for price calculation...");
-  await page.waitForFunction(() => window.__PRICE_RESPONSE__ !== null, {
-    timeout: 60000,
-  });
+  await page.waitForFunction(
+    () => window.__PRICE_RESPONSE__ !== null,
+    { timeout: 60000 }
+  );
 
   const price = await page.evaluate(() => window.__PRICE_RESPONSE__);
 
-  console.log("\n✅ FINAL PRICE RESPONSE");
+  console.log("✅ FINAL PRICE RESPONSE");
   console.log(JSON.stringify(price, null, 2));
 
   await browser.close();
