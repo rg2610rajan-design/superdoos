@@ -1,7 +1,7 @@
 const express = require('express');
 const { chromium } = require("playwright");
 const app = express();
-const port = process.env.PORT || 3000;
+const port = process.env.PORT || 8080;
 
 app.get('/get-price', async (req, res) => {
     // Launch with specific flags for server environments
