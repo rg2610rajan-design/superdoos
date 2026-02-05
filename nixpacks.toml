@@ -2,4 +2,5 @@
 nixPkgs = ['...', 'nodejs']
 
 [phases.build]
+# This command installs the browser and all required Linux libraries
 cmds = ['npm install', 'npx playwright install --with-deps chromium']
