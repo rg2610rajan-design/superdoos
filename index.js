@@ -1,13 +1,25 @@
 const express = require('express');
 const { chromium } = require("playwright");
 const app = express();
+
+// Important: This allows the API to read JSON sent from PHP
+app.use(express.json());
+
 const port = process.env.PORT || 3000;
 
-app.get('/get-price', async (req, res) => {
-    // Launch with specific flags for server environments
+app.post('/get-price', async (req, res) => {
+    const { productId, qty, chosen } = req.body;
+
+    // Basic validation
+    if (!productId || !qty || !chosen) {
+        return res.status(400).json({ error: "Missing productId, qty, or chosen parameters." });
+    }
+
+    console.log(`Scraping price for Product: ${productId}, Qty: ${qty}`);
+
     const browser = await chromium.launch({ 
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
+        args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
     });
 
     try {
@@ -16,30 +28,18 @@ app.get('/get-price', async (req, res) => {
         });
         const page = await context.newPage();
 
-        // --- Your existing intercept logic ---
-        await page.addInitScript(() => {
+        // Pass the PHP parameters into the browser context
+        await page.addInitScript(({ productId, qty, chosen }) => {
             const originalFetch = window.fetch;
             window.__PRICE_RESPONSE__ = null;
             window.fetch = async (url, options = {}) => {
                 if (typeof url === "string" && url.includes("/productDesigner/design/price")) {
                     try {
                         let body = JSON.parse(options.body);
-                        body.productId = 1481;
-                        body.qty = 1500;
-                        body.chosen = {
-                            code: "0201",
-                            handles: "geen handgrepen / stansbewerking",
-                            creases: "nee",
-                            printColors: "onbedrukt",
-                            qualityCode: 10158,
-                            length: "600",
-                            width: "600",
-                            height: "500",
-                            qualityCode_color: "Bruin/Bruin",
-                            qualityCode_flute: "BC",
-                            qualityCode_cardboardQuality: "standard",
-                            designName: "n mn ",
-                        };
+                        // Apply parameters from PHP
+                        body.productId = productId;
+                        body.qty = qty;
+                        body.chosen = chosen;
                         options.body = JSON.stringify(body);
                     } catch (e) {}
                 }
@@ -52,14 +52,13 @@ app.get('/get-price', async (req, res) => {
                 }
                 return response;
             };
-        });
+        }, { productId, qty, chosen });
 
         await page.goto("https://www.superdoos.nl/doos-op-maat/vouwdozen-op-maat", {
             waitUntil: "domcontentloaded",
             timeout: 60000
         });
 
-        // Wait for price data
         await page.waitForFunction(() => window.__PRICE_RESPONSE__ !== null, { timeout: 30000 });
         const priceData = await page.evaluate(() => window.__PRICE_RESPONSE__);
 
@@ -72,5 +71,5 @@ app.get('/get-price', async (req, res) => {
 });
 
 app.listen(port, '0.0.0.0', () => {
-    console.log(`API running on port ${port}`);
+    console.log(`Dynamic API running on port ${port}`);
 });
